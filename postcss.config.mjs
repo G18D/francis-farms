@@ -1,3 +1,1 @@
-export default {
-  plugins: {}
-};c
+export default { plugins: {} };
