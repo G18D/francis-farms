@@ -5,8 +5,8 @@ import { useState, useEffect, useRef } from "react";
 const ADMIN_PASSWORD = "francis2024"; // Change before going live
 
 // 🔌 SUPABASE — paste your project URL and anon key here
-const SUPABASE_URL  = ""; // e.g. https://xxxx.supabase.co
-const SUPABASE_ANON = ""; // your anon/public key
+const SUPABASE_URL  = "https://nzessbozurpqchtjkakn.supabase.co";
+const SUPABASE_ANON = "sb_publishable_bzmzo3waDgQWJSivscAUNw_Vlxk3cGt";
 const STORAGE_BUCKET = "product-images";
 // ────────────────────────────────────────────────────────────
 
