@@ -73,15 +73,57 @@ export default function FrancisFarms() {
   const searchRef = useRef(null);
 
   useEffect(() => {
+    // Load product images from Supabase Storage
+    const loadProductImages = async () => {
+      try {
+        const SUPABASE_URL = "https://nzessbozurpqchtjkakn.supabase.co";
+        const SUPABASE_ANON = "sb_publishable_bzmzo3waDgQWJSivscAUNw_Vlxk3cGt";
+
+        // Fetch list of files from product-images bucket
+        const response = await fetch(`${SUPABASE_URL}/storage/v1/object/list/product-images`, {
+          headers: { 'Authorization': `Bearer ${SUPABASE_ANON}` }
+        });
+
+        if (response.ok) {
+          const files = await response.json();
+
+          // Map files to products by matching "product-{id}.{ext}" pattern
+          const imageMap = {};
+          files.forEach(file => {
+            const match = file.name.match(/^product-(\d+)\./);
+            if (match) {
+              const productId = parseInt(match[1]);
+              imageMap[productId] = `${SUPABASE_URL}/storage/v1/object/public/product-images/${file.name}`;
+            }
+          });
+
+          // Update products with image URLs from Supabase
+          setProducts(prev => prev.map(p => ({
+            ...p,
+            image: imageMap[p.id] || p.image
+          })));
+        }
+      } catch (e) {
+        console.log('Could not load product images from Supabase:', e);
+      }
+    };
+
+    // Load localStorage overrides for price/stock from admin
     try {
       const saved = localStorage.getItem("ff_products");
       if (saved) {
         const overrides = JSON.parse(saved);
-        setProducts(prev => prev.map(p => { const o = overrides.find(x => x.id === p.id); return o ? { ...p, ...o } : p; }));
+        setProducts(prev => prev.map(p => {
+          const o = overrides.find(x => x.id === p.id);
+          return o ? { ...p, price: o.price, inStock: o.inStock, unit: o.unit } : p;
+        }));
       }
       const pts = localStorage.getItem("ff_loyalty_points");
       if (pts) setLoyaltyPoints(parseInt(pts));
     } catch (e) {}
+
+    // Load images from Supabase
+    loadProductImages();
 
     const link = document.createElement("link");
     link.rel = "stylesheet";
