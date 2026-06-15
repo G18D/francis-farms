@@ -1,6 +1,9 @@
 "use client";
 import { useState, useEffect, useRef } from "react";
 import { ShoppingCart, X, Plus, Minus, Truck, Leaf, ArrowRight, Check, MapPin, Phone, Mail, Package, Star, ChevronRight, ArrowLeft, Search, Calendar, Clock, Tag, Gift, MessageCircle } from "lucide-react";
+import { loadStripe } from "@stripe/stripe-js";
+
+const stripePromise = loadStripe("pk_live_51SmpyU0cwIcJbi3RbMOAllJv3nyM1xxsPhDtQIZyvFZCLXtQijUlymSahGRzUNxwRwgF2ebVT1jnhLQLNTN5l98f00OTyn4oYJ");
 
 const S = {
   bg: "#f7f5f0", card: "#ffffff", green: "#1e3a1e", greenLight: "#2d5a2d",
@@ -280,6 +283,38 @@ export default function FrancisFarms() {
     setProcessing(true);
 
     try {
+      // Process Stripe payment
+      const stripe = await stripePromise;
+      const res = await fetch("/api/create-payment-intent", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ amount: total }),
+      });
+      const { clientSecret } = await res.json();
+
+      const { error: stripeError } = await stripe.confirmCardPayment(clientSecret, {
+        payment_method: {
+          card: {
+            number: form.card.replace(/\s/g, ""),
+            exp_month: parseInt(form.expiry.split("/")[0]),
+            exp_year: parseInt("20" + form.expiry.split("/")[1]),
+            cvc: form.cvv,
+          },
+          billing_details: {
+            name: form.name,
+            email: form.email,
+            phone: form.phone,
+            address: { postal_code: form.zip },
+          },
+        },
+      });
+
+      if (stripeError) {
+        alert("Payment failed: " + stripeError.message);
+        setProcessing(false);
+        return;
+      }
+
       const num = "FF-" + Math.floor(10000 + Math.random() * 90000);
 
       const orderData = {
