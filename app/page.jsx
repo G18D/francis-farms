@@ -39,14 +39,16 @@ const DELIVERY_FEE = 10.00;
 const FREE_THRESHOLD = 90;
 const POINTS_PER_DOLLAR = 1;
 
-function FieldInput({ label, value, onChange, placeholder, type = "text", required }) {
+function FieldInput({ label, value, onChange, placeholder, type = "text", required, error }) {
   const [focus, setFocus] = useState(false);
+  const hasError = error && error.length > 0;
   return (
     <div style={{ marginBottom: 14 }}>
-      <label style={{ fontSize: 11, color: S.muted, display: "block", marginBottom: 6, letterSpacing: 1.5, textTransform: "uppercase" }}>{label}{required && <span style={{ color: "#ef4444" }}> *</span>}</label>
+      <label style={{ fontSize: 11, color: hasError ? "#ef4444" : S.muted, display: "block", marginBottom: 6, letterSpacing: 1.5, textTransform: "uppercase" }}>{label}{required && <span style={{ color: "#ef4444" }}> *</span>}</label>
       <input type={type} value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder}
         onFocus={() => setFocus(true)} onBlur={() => setFocus(false)}
-        style={{ width: "100%", background: focus ? "#fff" : S.bg, border: `1.5px solid ${focus ? S.greenLight : S.border}`, borderRadius: 10, padding: "11px 14px", color: S.text, fontSize: 14, outline: "none", boxSizing: "border-box", transition: "all 0.2s", fontFamily: "inherit" }} />
+        style={{ width: "100%", background: focus ? "#fff" : S.bg, border: `1.5px solid ${hasError ? "#ef4444" : (focus ? S.greenLight : S.border)}`, borderRadius: 10, padding: "11px 14px", color: S.text, fontSize: 14, outline: "none", boxSizing: "border-box", transition: "all 0.2s", fontFamily: "inherit" }} />
+      {hasError && <div style={{ fontSize: 12, color: "#ef4444", marginTop: 4 }}>{error}</div>}
     </div>
   );
 }
@@ -70,6 +72,8 @@ export default function FrancisFarms() {
   const [trackingNum, setTrackingNum] = useState("");
   const [trackingResult, setTrackingResult] = useState(null);
   const [form, setForm] = useState({ name: "", email: "", phone: "", address: "", notes: "", card: "", expiry: "", cvv: "", zip: "" });
+  const [formErrors, setFormErrors] = useState({});
+  const [attemptedSubmit, setAttemptedSubmit] = useState(false);
   const searchRef = useRef(null);
 
   useEffect(() => {
@@ -188,10 +192,91 @@ export default function FrancisFarms() {
     return d.toISOString().split("T")[0];
   };
 
-  const placeOrder = async () => {
-    if (!deliveryDate || !deliverySlot) { alert("Please select a delivery date and time slot."); return; }
-    if (!form.name || !form.address) { alert("Please fill in your name and address."); return; }
+  const validateForm = () => {
+    const errors = {};
 
+    // Name validation
+    if (!form.name || form.name.trim().length === 0) {
+      errors.name = "Name is required";
+    }
+
+    // Phone validation
+    if (!form.phone || form.phone.trim().length === 0) {
+      errors.phone = "Phone number is required";
+    } else if (form.phone.replace(/\D/g, "").length < 10) {
+      errors.phone = "Enter a valid phone number";
+    }
+
+    // Email validation
+    if (!form.email || form.email.trim().length === 0) {
+      errors.email = "Email is required";
+    } else if (!form.email.includes("@") || !form.email.includes(".")) {
+      errors.email = "Enter a valid email address";
+    }
+
+    // Address validation
+    if (!form.address || form.address.trim().length === 0) {
+      errors.address = "Delivery address is required";
+    }
+
+    // Delivery date validation
+    if (!deliveryDate) {
+      errors.deliveryDate = "Please select a delivery date";
+    }
+
+    // Delivery slot validation
+    if (!deliverySlot) {
+      errors.deliverySlot = "Please select a delivery time slot";
+    }
+
+    // Card number validation
+    if (!form.card || form.card.trim().length === 0) {
+      errors.card = "Card number is required";
+    } else if (form.card.replace(/\D/g, "").length !== 16) {
+      errors.card = "Card number must be 16 digits";
+    }
+
+    // Expiry validation (MM/YY format)
+    if (!form.expiry || form.expiry.trim().length === 0) {
+      errors.expiry = "Expiry date is required";
+    } else if (!/^\d{2}\/\d{2}$/.test(form.expiry)) {
+      errors.expiry = "Format: MM/YY";
+    } else {
+      const [month, year] = form.expiry.split('/').map(n => parseInt(n));
+      if (month < 1 || month > 12) {
+        errors.expiry = "Invalid month";
+      }
+    }
+
+    // CVV validation
+    if (!form.cvv || form.cvv.trim().length === 0) {
+      errors.cvv = "CVV is required";
+    } else if (form.cvv.length < 3 || form.cvv.length > 4) {
+      errors.cvv = "CVV must be 3-4 digits";
+    }
+
+    // ZIP validation
+    if (!form.zip || form.zip.trim().length === 0) {
+      errors.zip = "ZIP code is required";
+    } else if (form.zip.length < 5) {
+      errors.zip = "Enter a valid ZIP code";
+    }
+
+    return errors;
+  };
+
+  const placeOrder = async () => {
+    setAttemptedSubmit(true);
+    const errors = validateForm();
+
+    if (Object.keys(errors).length > 0) {
+      setFormErrors(errors);
+      // Scroll to first error
+      window.scrollTo({ top: 400, behavior: 'smooth' });
+      return;
+    }
+
+    setFormErrors({});
     setProcessing(true);
 
     try {
@@ -528,10 +613,10 @@ export default function FrancisFarms() {
               {/* Delivery info */}
               <div style={{ background:S.card, borderRadius:16, padding:24, border:`1px solid ${S.border}` }}>
                 <h3 className="disp" style={{ fontSize:24, color:S.green, marginBottom:20 }}>Delivery Details</h3>
-                <FieldInput label="Full Name" value={form.name} onChange={v=>setF("name",v)} placeholder="Your name" required />
-                <FieldInput label="Phone" value={form.phone} onChange={v=>setF("phone",v)} placeholder="+1 (340) 000-0000" required />
-                <FieldInput label="Email" value={form.email} onChange={v=>setF("email",v)} placeholder="you@email.com" type="email" required />
-                <FieldInput label="Delivery Address" value={form.address} onChange={v=>setF("address",v)} placeholder="Street address, St. Thomas" required />
+                <FieldInput label="Full Name" value={form.name} onChange={v=>setF("name",v)} placeholder="Your name" required error={formErrors.name} />
+                <FieldInput label="Phone" value={form.phone} onChange={v=>setF("phone",v)} placeholder="+1 (340) 000-0000" required error={formErrors.phone} />
+                <FieldInput label="Email" value={form.email} onChange={v=>setF("email",v)} placeholder="you@email.com" type="email" required error={formErrors.email} />
+                <FieldInput label="Delivery Address" value={form.address} onChange={v=>setF("address",v)} placeholder="Street address, St. Thomas" required error={formErrors.address} />
                 <div style={{ marginBottom:14 }}>
                   <label style={{ fontSize:11, color:S.muted, display:"block", marginBottom:6, letterSpacing:1.5, textTransform:"uppercase" }}>Notes</label>
                   <textarea value={form.notes} onChange={e=>setF("notes",e.target.value)} placeholder="Gate code, landmark, special instructions..." rows={2} style={{ width:"100%", background:S.bg, border:`1.5px solid ${S.border}`, borderRadius:10, padding:"11px 14px", color:S.text, fontSize:14, resize:"none", outline:"none", boxSizing:"border-box", fontFamily:"inherit" }} />
@@ -544,11 +629,12 @@ export default function FrancisFarms() {
                   <Calendar size={18} /> Delivery Schedule
                 </h3>
                 <div style={{ marginBottom:14 }}>
-                  <label style={{ fontSize:11, color:S.muted, display:"block", marginBottom:6, letterSpacing:1.5, textTransform:"uppercase" }}>Delivery Date <span style={{ color:"#ef4444" }}>*</span></label>
-                  <input type="date" value={deliveryDate} min={getTodayDate()} onChange={e=>setDeliveryDate(e.target.value)} style={{ width:"100%", padding:"11px 14px", borderRadius:10, border:`1.5px solid ${S.border}`, background:S.bg, color:S.text, fontSize:14, outline:"none", boxSizing:"border-box", fontFamily:"inherit" }} />
+                  <label style={{ fontSize:11, color:formErrors.deliveryDate ? "#ef4444" : S.muted, display:"block", marginBottom:6, letterSpacing:1.5, textTransform:"uppercase" }}>Delivery Date <span style={{ color:"#ef4444" }}>*</span></label>
+                  <input type="date" value={deliveryDate} min={getTodayDate()} onChange={e=>setDeliveryDate(e.target.value)} style={{ width:"100%", padding:"11px 14px", borderRadius:10, border:`1.5px solid ${formErrors.deliveryDate ? "#ef4444" : S.border}`, background:S.bg, color:S.text, fontSize:14, outline:"none", boxSizing:"border-box", fontFamily:"inherit" }} />
+                  {formErrors.deliveryDate && <div style={{ fontSize:12, color:"#ef4444", marginTop:4 }}>{formErrors.deliveryDate}</div>}
                 </div>
                 <div>
-                  <label style={{ fontSize:11, color:S.muted, display:"block", marginBottom:8, letterSpacing:1.5, textTransform:"uppercase" }}>Time Slot <span style={{ color:"#ef4444" }}>*</span></label>
+                  <label style={{ fontSize:11, color:formErrors.deliverySlot ? "#ef4444" : S.muted, display:"block", marginBottom:8, letterSpacing:1.5, textTransform:"uppercase" }}>Time Slot <span style={{ color:"#ef4444" }}>*</span></label>
                   <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
                     {DELIVERY_SLOTS.map(slot => (
                       <button key={slot} onClick={() => setDeliverySlot(slot)} style={{ padding:"9px 12px", borderRadius:8, border:`1.5px solid ${deliverySlot===slot ? S.green : S.border}`, background:deliverySlot===slot ? S.tag : "transparent", color:deliverySlot===slot ? S.green : S.muted, fontSize:12, fontWeight:deliverySlot===slot ? 600 : 400, cursor:"pointer", transition:"all 0.15s", display:"flex", alignItems:"center", gap:5 }}>
@@ -556,6 +642,7 @@ export default function FrancisFarms() {
                       </button>
                     ))}
                   </div>
+                  {formErrors.deliverySlot && <div style={{ fontSize:12, color:"#ef4444", marginTop:4 }}>{formErrors.deliverySlot}</div>}
                 </div>
               </div>
 
@@ -563,11 +650,11 @@ export default function FrancisFarms() {
               <div style={{ background:S.card, borderRadius:16, padding:24, border:`1px solid ${S.border}` }}>
                 <h3 className="disp" style={{ fontSize:22, color:S.green, marginBottom:4 }}>Payment</h3>
                 <p style={{ fontSize:12, color:S.muted, marginBottom:20 }}>Secured by Stripe · 256-bit SSL</p>
-                <FieldInput label="Card Number" value={form.card} onChange={v=>setF("card",v.replace(/\D/g,"").slice(0,16).replace(/(.{4})/g,"$1 ").trim())} placeholder="1234 5678 9012 3456" />
+                <FieldInput label="Card Number" value={form.card} onChange={v=>setF("card",v.replace(/\D/g,"").slice(0,16).replace(/(.{4})/g,"$1 ").trim())} placeholder="1234 5678 9012 3456" required error={formErrors.card} />
                 <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:10 }}>
-                  <FieldInput label="Expiry" value={form.expiry} onChange={v=>setF("expiry",v)} placeholder="MM/YY" />
-                  <FieldInput label="CVV" value={form.cvv} onChange={v=>setF("cvv",v.replace(/\D/g,"").slice(0,4))} placeholder="•••" />
-                  <FieldInput label="ZIP" value={form.zip} onChange={v=>setF("zip",v)} placeholder="00801" />
+                  <FieldInput label="Expiry" value={form.expiry} onChange={v=>setF("expiry",v.replace(/\D/g,"").slice(0,5).replace(/^(\d{2})(\d)/,"$1/$2"))} placeholder="MM/YY" required error={formErrors.expiry} />
+                  <FieldInput label="CVV" value={form.cvv} onChange={v=>setF("cvv",v.replace(/\D/g,"").slice(0,4))} placeholder="•••" required error={formErrors.cvv} />
+                  <FieldInput label="ZIP" value={form.zip} onChange={v=>setF("zip",v)} placeholder="00801" required error={formErrors.zip} />
                 </div>
               </div>
             </div>
@@ -613,7 +700,7 @@ export default function FrancisFarms() {
                     🎁 You'll earn {pointsEarned} loyalty points on this order
                   </div>
                 </div>
-                <button onClick={placeOrder} disabled={processing || !form.name || !form.address || !deliveryDate || !deliverySlot} className="btn-green" style={{ width:"100%", background:S.green, color:"#fff", border:"none", borderRadius:12, padding:15, fontSize:15, fontWeight:600, cursor:processing?"wait":"pointer", marginTop:20, opacity:(!form.name||!form.address||!deliveryDate||!deliverySlot)?0.4:1, display:"flex", alignItems:"center", justifyContent:"center", gap:8 }}>
+                <button onClick={placeOrder} disabled={processing || Object.keys(validateForm()).length > 0} className="btn-green" style={{ width:"100%", background:S.green, color:"#fff", border:"none", borderRadius:12, padding:15, fontSize:15, fontWeight:600, cursor:processing?"wait":"pointer", marginTop:20, opacity:(Object.keys(validateForm()).length > 0)?0.4:1, display:"flex", alignItems:"center", justifyContent:"center", gap:8 }}>
                   {processing ? <><span style={{ width:16, height:16, border:"2px solid rgba(255,255,255,0.35)", borderTopColor:"#fff", borderRadius:"50%", display:"inline-block", animation:"spin 0.7s linear infinite" }} />Processing...</> : <>Place Order · ${total.toFixed(2)} <ChevronRight size={15} /></>}
                 </button>
                 <a href={whatsappMessage()} target="_blank" rel="noreferrer" style={{ display:"flex", alignItems:"center", justifyContent:"center", gap:8, marginTop:12, padding:"12px", borderRadius:12, border:`1.5px solid #25D366`, color:"#128C7E", fontSize:14, fontWeight:600, textDecoration:"none" }}>
