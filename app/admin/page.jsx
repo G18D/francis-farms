@@ -1,4 +1,5 @@
 "use client";
+import { productImage } from "../product-images";
 import { useState, useEffect, useRef } from "react";
 
 // ── CONFIG ──────────────────────────────────────────────────
@@ -63,7 +64,7 @@ const TABS = [
 
 // ── Helpers ─────────────────────────────────────────────────
 const fmt     = t => new Date(t+"T00:00").toLocaleDateString("en-US",{month:"short",day:"numeric"});
-const today   = () => new Date().toISOString().split("T")[0];
+const today = () => new Intl.DateTimeFormat("en-CA", { timeZone: "America/St_Thomas", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
 const uid     = () => Math.floor(10000+Math.random()*90000);
 
 // ── Supabase Storage helpers ─────────────────────────────────
@@ -145,6 +146,7 @@ export default function Admin() {
   const [tab,        setTab]        = useState("overview");
   const [products,   setProducts]   = useState(DEFAULT_PRODUCTS);
   const [orders,     setOrders]     = useState(SAMPLE_ORDERS);
+  const [demoData, setDemoData] = useState(true);
   const [selected,   setSelected]   = useState(null);
   const [toast,      setToast]      = useState(null);
   const [search,     setSearch]     = useState("");
@@ -172,7 +174,7 @@ export default function Admin() {
       const s = localStorage.getItem("ff_products_v2");
       if (s) { const d=JSON.parse(s); setProducts(p=>p.map(x=>{const o=d.find(y=>y.id===x.id);return o?{...x,...o}:x;})); }
       const o = localStorage.getItem("ff_orders_v2");
-      if (o) setOrders(JSON.parse(o));
+      if (o) { setOrders(JSON.parse(o)); setDemoData(false); }
     } catch(e){}
 
     const link = document.createElement("link");
@@ -307,15 +309,12 @@ export default function Admin() {
   };
 
   // ── Analytics data ───────────────────────────────────────
-  const weeklyRevenue = [
-    {label:"Mon", value:42},
-    {label:"Tue", value:68},
-    {label:"Wed", value:55},
-    {label:"Thu", value:91},
-    {label:"Fri", value:77},
-    {label:"Sat", value:115},
-    {label:"Sun", value:34},
-  ];
+  const weeklyRevenue = Array.from({ length: 7 }, (_, i) => {
+    const date = new Date(today()+"T12:00:00");
+    date.setDate(date.getDate() - ((date.getDay()+6)%7) + i);
+    const key = [date.getFullYear(), String(date.getMonth()+1).padStart(2,"0"), String(date.getDate()).padStart(2,"0")].join("-");
+    return { label: ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"][i], value: orders.filter(o => o.date === key && o.status === "delivered").reduce((sum,o) => sum + o.subtotal + o.delivery, 0) };
+  });
 
   const topProducts = products.map(p => ({
     name: p.name,
@@ -372,6 +371,7 @@ export default function Admin() {
   return (
     <div style={{display:"flex",minHeight:"100vh",background:BG}}>
 
+      <div className="admin-data-notice" role="status">{demoData ? "Preview data: sample orders are shown. " : "Orders shown are saved in this browser. "}Product edits are stored on this device; they are not yet shared with other customers.</div>
       {/* Toast */}
       {toast && (
         <div className="toast-anim" style={{position:"fixed",bottom:28,left:"50%",transform:"translateX(-50%)",background:toast.type==="err"?"#dc2626":G,color:"#fff",padding:"12px 24px",borderRadius:50,fontSize:14,fontWeight:600,zIndex:999,boxShadow:"0 4px 24px rgba(0,0,0,0.18)",whiteSpace:"nowrap"}}>
@@ -444,7 +444,7 @@ export default function Admin() {
       )}
 
       {/* ── SIDEBAR ── */}
-      <aside style={{width:230,background:G,display:"flex",flexDirection:"column",padding:"28px 14px",position:"fixed",top:0,bottom:0,left:0,zIndex:50,boxShadow:"4px 0 24px rgba(30,58,30,0.15)"}}>
+      <aside className="admin-sidebar" style={{width:230,background:G,display:"flex",flexDirection:"column",padding:"28px 14px",position:"fixed",top:0,bottom:0,left:0,zIndex:50,boxShadow:"4px 0 24px rgba(30,58,30,0.15)"}}>
         <div style={{padding:"0 10px 28px"}}>
           <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:4}}>
             <span style={{fontSize:22}}>🌿</span>
@@ -473,7 +473,7 @@ export default function Admin() {
       </aside>
 
       {/* ── MAIN ── */}
-      <main style={{marginLeft:230,flex:1,padding:"32px 36px"}}>
+      <main className="admin-main" style={{marginLeft:230,flex:1,padding:"32px 36px 90px",minWidth:0}}>
 
         {/* ── OVERVIEW ── */}
         {tab==="overview" && (
@@ -754,7 +754,7 @@ export default function Admin() {
               {products.map((p,i)=>(
                 <div key={p.id} style={{display:"grid",gridTemplateColumns:"auto 1fr auto auto auto",padding:"14px 22px",borderBottom:i<products.length-1?`1px solid #f5f1eb`:"none",gap:16,alignItems:"center",opacity:p.inStock?1:0.5}}>
                   <div style={{width:44,height:44,borderRadius:10,overflow:"hidden",background:"#f5f1eb",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
-                    {p.image?<img src={p.image} alt={p.name} style={{width:"100%",height:"100%",objectFit:"cover"}} />:<span style={{fontSize:24}}>{p.emoji}</span>}
+                    {productImage(p)?<img src={productImage(p)} alt={p.name} style={{width:"100%",height:"100%",objectFit:"cover"}} />:<span style={{fontSize:24}}>{p.emoji}</span>}
                   </div>
                   <div>
                     <div style={{fontSize:15,fontWeight:600,color:"#1a2a1a"}}>{p.name}</div>
@@ -789,7 +789,7 @@ export default function Admin() {
                 <div key={p.id} style={{display:"grid",gridTemplateColumns:"1fr auto auto auto",padding:"14px 22px",borderBottom:i<products.length-1?`1px solid #f5f1eb`:"none",gap:16,alignItems:"center"}}>
                   <div style={{display:"flex",alignItems:"center",gap:12}}>
                     <div style={{width:36,height:36,borderRadius:8,overflow:"hidden",background:"#f5f1eb",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
-                      {p.image?<img src={p.image} alt={p.name} style={{width:"100%",height:"100%",objectFit:"cover"}} />:<span style={{fontSize:18}}>{p.emoji}</span>}
+                      {productImage(p)?<img src={productImage(p)} alt={p.name} style={{width:"100%",height:"100%",objectFit:"cover"}} />:<span style={{fontSize:18}}>{p.emoji}</span>}
                     </div>
                     <span style={{fontSize:14,fontWeight:500,color:"#1a2a1a"}}>{p.name}</span>
                   </div>
@@ -859,7 +859,7 @@ export default function Admin() {
                 <div key={p.id} className="img-card" style={{background:CARD,borderRadius:16,border:`1px solid ${BR}`,overflow:"hidden",boxShadow:"0 2px 8px rgba(30,58,30,0.04)"}}>
                   <div style={{position:"relative",height:158,background:"#f5f1eb",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}
                     onClick={()=>{setUploadId(p.id);fileRef.current?.click();}}>
-                    {p.image?<img src={p.image} alt={p.name} style={{width:"100%",height:"100%",objectFit:"cover"}} />
+                    {productImage(p)?<img src={productImage(p)} alt={p.name} style={{width:"100%",height:"100%",objectFit:"cover"}} />
                       :<div style={{textAlign:"center"}}><div style={{fontSize:52,marginBottom:6}}>{p.emoji}</div><div style={{fontSize:11,color:"#a89888"}}>No photo yet</div></div>}
                     <div className="img-cover" style={{position:"absolute",inset:0,background:"rgba(30,58,30,0.72)",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",opacity:0,transition:"opacity 0.2s"}}>
                       <div style={{fontSize:28,marginBottom:6}}>📷</div>

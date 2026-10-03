@@ -1,5 +1,6 @@
 "use client";
-import { useState, useEffect, useRef } from "react";
+import { productImage } from "./product-images";
+import { useState, useEffect, useRef, useId } from "react";
 import { ShoppingCart, X, Plus, Minus, Truck, Leaf, ArrowRight, Check, MapPin, Phone, Mail, Package, Star, ChevronRight, ArrowLeft, Search, Calendar, Clock, Tag, Gift, MessageCircle } from "lucide-react";
 import { loadStripe } from "@stripe/stripe-js";
 
@@ -37,18 +38,19 @@ const DEFAULT_PRODUCTS = [
   { id: 10, name: "Pineapple", price: 5.00, unit: "each", category: "Fruits", emoji: "🍍", inStock: true, desc: "Sweeter than any imported variety. Caribbean gold.", longDesc: "Caribbean pineapples are a completely different fruit. Smaller, more fragrant, and intensely sweet with lower acidity.", rating: 5.0, reviews: [{ name: "Tom A.", rating: 5, text: "Best pineapple I've ever had. Nothing like the store ones.", date: "May 2026" }], image: null },
 ];
 
-const CATS = ["All", "Fruits", "Vegetables", "Eggs", "Herbs"];
+const CATS = ["All", "Fruits", "Vegetables", "Eggs", "Herbs", "Other"];
 const DELIVERY_FEE = 10.00;
 const FREE_THRESHOLD = 90;
 const POINTS_PER_DOLLAR = 1;
 
 function FieldInput({ label, value, onChange, placeholder, type = "text", required, error }) {
   const [focus, setFocus] = useState(false);
+  const inputId = useId();
   const hasError = error && error.length > 0;
   return (
     <div style={{ marginBottom: 14 }}>
-      <label style={{ fontSize: 11, color: hasError ? "#ef4444" : S.muted, display: "block", marginBottom: 6, letterSpacing: 1.5, textTransform: "uppercase" }}>{label}{required && <span style={{ color: "#ef4444" }}> *</span>}</label>
-      <input type={type} value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder}
+      <label htmlFor={inputId} style={{ fontSize: 11, color: hasError ? "#ef4444" : S.muted, display: "block", marginBottom: 6, letterSpacing: 1.5, textTransform: "uppercase" }}>{label}{required && <span style={{ color: "#ef4444" }}> *</span>}</label>
+      <input id={inputId} aria-invalid={!!hasError} required={required} type={type} value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder}
         onFocus={() => setFocus(true)} onBlur={() => setFocus(false)}
         style={{ width: "100%", background: focus ? "#fff" : S.bg, border: `1.5px solid ${hasError ? "#ef4444" : (focus ? S.greenLight : S.border)}`, borderRadius: 10, padding: "11px 14px", color: S.text, fontSize: 14, outline: "none", boxSizing: "border-box", transition: "all 0.2s", fontFamily: "inherit" }} />
       {hasError && <div style={{ fontSize: 12, color: "#ef4444", marginTop: 4 }}>{error}</div>}
@@ -88,7 +90,9 @@ export default function FrancisFarms() {
 
         // Fetch list of files from product-images bucket
         const response = await fetch(`${SUPABASE_URL}/storage/v1/object/list/product-images`, {
-          headers: { 'Authorization': `Bearer ${SUPABASE_ANON}` }
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${SUPABASE_ANON}`, 'apikey': SUPABASE_ANON, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ prefix: '', limit: 100, offset: 0 })
         });
 
         if (response.ok) {
@@ -117,13 +121,10 @@ export default function FrancisFarms() {
 
     // Load localStorage overrides for price/stock from admin
     try {
-      const saved = localStorage.getItem("ff_products");
+      const saved = localStorage.getItem("ff_products_v2") || localStorage.getItem("ff_products");
       if (saved) {
         const overrides = JSON.parse(saved);
-        setProducts(prev => prev.map(p => {
-          const o = overrides.find(x => x.id === p.id);
-          return o ? { ...p, price: o.price, inStock: o.inStock, unit: o.unit } : p;
-        }));
+        setProducts(overrides.map(o => ({ ...DEFAULT_PRODUCTS.find(p => p.id === o.id), desc: "Fresh selections from Francis Farms.", longDesc: "Choose your quantity and delivery window at checkout.", reviews: [], ...o })));
       }
       const pts = localStorage.getItem("ff_loyalty_points");
       if (pts) setLoyaltyPoints(parseInt(pts));
@@ -435,9 +436,9 @@ export default function FrancisFarms() {
           <button onClick={() => setSelectedProduct(null)} style={{ display:"flex", alignItems:"center", gap:6, background:"none", border:"none", color:S.muted, cursor:"pointer", fontSize:14, marginBottom:28 }}>
             <ArrowLeft size={14} /> Back to shop
           </button>
-          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:40, marginBottom:48 }}>
+          <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(min(100%,300px),1fr))", gap:40, marginBottom:48 }}>
             <div style={{ background:S.card, borderRadius:20, border:`1px solid ${S.border}`, display:"flex", alignItems:"center", justifyContent:"center", minHeight:320, overflow:"hidden" }}>
-              {p.image ? <img src={p.image} alt={p.name} style={{ width:"100%", height:"100%", objectFit:"cover" }} /> : <span style={{ fontSize:100 }}>{p.emoji}</span>}
+              {productImage(p) ? <img src={productImage(p)} alt={p.name} style={{ width:"100%", height:"100%", objectFit:"cover" }} /> : <span style={{ fontSize:100 }}>{p.emoji}</span>}
             </div>
             <div style={{ display:"flex", flexDirection:"column", justifyContent:"center" }}>
               <div style={{ display:"inline-flex", alignItems:"center", gap:5, background:S.tag, border:"1px solid #c5dcc5", borderRadius:50, padding:"4px 12px", marginBottom:14, width:"fit-content" }}>
@@ -505,7 +506,7 @@ export default function FrancisFarms() {
 
       {/* ═══ SHOP ═══ */}
       {page === "shop" && (
-        <div>
+        <div className="shop-shell">
           <div className="fade-up" style={{ padding:"64px 28px 52px", textAlign:"center", background:"linear-gradient(170deg,#eaf4ea 0%,#f7f5f0 100%)", borderBottom:`1px solid ${S.border}` }}>
             <div style={{ display:"inline-flex", alignItems:"center", gap:6, background:S.tag, border:"1px solid #c5dcc5", borderRadius:50, padding:"6px 16px", marginBottom:22 }}>
               <Leaf size={12} color={S.tagText} />
@@ -515,14 +516,15 @@ export default function FrancisFarms() {
               Farm-Fresh Produce<br /><em style={{ color:S.goldLight }}>Delivered to You</em>
             </h1>
             <p style={{ color:S.muted, fontSize:16, maxWidth:400, margin:"0 auto 28px", lineHeight:1.8 }}>Grown on St. Thomas. Picked fresh. Delivered the same day.</p>
-            <div style={{ display:"flex", gap:10, justifyContent:"center" }}>
-              <a href="/about" style={{ padding:"10px 24px", borderRadius:50, background:S.green, color:"#fff", fontSize:13, fontWeight:600, textDecoration:"none" }}>About the Farm</a>
+            <div style={{ display:"flex", gap:10, justifyContent:"center", flexWrap:"wrap" }}>
+              <a href="#produce" className="shop-cta">Shop Fresh Produce <ArrowRight size={16} /></a>
+              <a href="/about" style={{ padding:"10px 24px", borderRadius:50, background:"#fff", color:S.green, border:`1px solid ${S.border}`, fontSize:13, fontWeight:600, textDecoration:"none" }}>About the Farm</a>
               <button onClick={() => setPage("track")} style={{ padding:"10px 24px", borderRadius:50, background:"none", border:`1.5px solid ${S.border}`, color:S.green, fontSize:13, fontWeight:600, cursor:"pointer" }}>Track Order</button>
             </div>
           </div>
 
           <div style={{ background:S.green, display:"flex", justifyContent:"center", gap:36, flexWrap:"wrap", padding:"13px 24px" }}>
-            {[[<Truck size={13} />, `Free delivery over $${FREE_THRESHOLD}`],[<Leaf size={13} />, "No pesticides · No wax"],[<Check size={13} />, "Same-day delivery, Mon–Sat"],[<Gift size={13} />, "Earn loyalty points every order"]].map(([icon,text]) => (
+            {[[<Truck size={13} />, `$${DELIVERY_FEE} delivery · Free at $${FREE_THRESHOLD}+`],[<Leaf size={13} />, "No pesticides · No wax"],[<Check size={13} />, "Same-day delivery, Mon–Sat"],[<Gift size={13} />, "Earn loyalty points every order"]].map(([icon,text]) => (
               <div key={text} style={{ display:"flex", alignItems:"center", gap:7 }}>
                 <span style={{ color:"#a8d8a8" }}>{icon}</span>
                 <span style={{ fontSize:12, color:"#d0ead0" }}>{text}</span>
@@ -530,18 +532,22 @@ export default function FrancisFarms() {
             ))}
           </div>
 
+          <section className="how-it-works" aria-label="How ordering works">
+            {[ ["01", "Choose your favorites", "Browse island produce, eggs, and herbs."], ["02", "Pick a delivery window", "Choose your date and time at checkout."], ["03", "We bring it to you", `$${DELIVERY_FEE} delivery. Free on orders of $${FREE_THRESHOLD} or more.`] ].map(([n,title,body]) => <div key={n}><span>{n}</span><div><h2>{title}</h2><p>{body}</p></div></div>)}
+          </section>
+          <div id="produce" className="catalog-heading"><div><p className="eyebrow">THE FARM SHOP</p><h2 className="disp">Fresh picks for your table</h2></div><p aria-live="polite">{filtered.length} products available</p></div>
           {/* Search */}
           <div style={{ padding:"20px 28px 0" }}>
             <div style={{ position:"relative", maxWidth:400 }}>
               <Search size={16} color={S.muted} style={{ position:"absolute", left:14, top:"50%", transform:"translateY(-50%)" }} />
-              <input ref={searchRef} value={search} onChange={e => setSearch(e.target.value)} placeholder="Search products..." style={{ width:"100%", padding:"11px 14px 11px 40px", borderRadius:50, border:`1.5px solid ${S.border}`, background:S.card, color:S.text, fontSize:14, outline:"none", boxSizing:"border-box", fontFamily:"inherit" }} />
+              <input aria-label="Search products" ref={searchRef} value={search} onChange={e => setSearch(e.target.value)} placeholder="Search products..." style={{ width:"100%", padding:"11px 14px 11px 40px", borderRadius:50, border:`1.5px solid ${S.border}`, background:S.card, color:S.text, fontSize:14, outline:"none", boxSizing:"border-box", fontFamily:"inherit" }} />
             </div>
           </div>
 
           {/* Category pills */}
           <div style={{ display:"flex", gap:8, padding:"16px 28px 14px", overflowX:"auto" }}>
             {CATS.map(cat => (
-              <button key={cat} onClick={() => setCategory(cat)} style={{ padding:"8px 20px", borderRadius:50, border:`1.5px solid ${category===cat ? S.green : S.border}`, background:category===cat ? S.green : S.card, color:category===cat ? "#fff" : S.muted, fontSize:13, fontWeight:500, cursor:"pointer", whiteSpace:"nowrap", transition:"all 0.2s" }}>
+              <button aria-pressed={category===cat} key={cat} onClick={() => setCategory(cat)} style={{ padding:"8px 20px", borderRadius:50, border:`1.5px solid ${category===cat ? S.green : S.border}`, background:category===cat ? S.green : S.card, color:category===cat ? "#fff" : S.muted, fontSize:13, fontWeight:500, cursor:"pointer", whiteSpace:"nowrap", transition:"all 0.2s" }}>
                 {cat}
               </button>
             ))}
@@ -551,20 +557,20 @@ export default function FrancisFarms() {
           {filtered.length === 0 ? (
             <div style={{ textAlign:"center", padding:"60px 0", color:S.muted }}>
               <Package size={40} style={{ margin:"0 auto 14px", display:"block", opacity:0.3 }} />
-              <p>No products found for "{search}"</p>
+              <p>No products match your selection.</p><button className="shop-cta" onClick={() => { setSearch(""); setCategory("All"); }}>Show all products</button>
             </div>
           ) : (
             <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(255px,1fr))", gap:16, padding:"8px 28px 36px" }}>
               {filtered.map(p => (
-                <div key={p.id} className="prod-card" onClick={() => setSelectedProduct(p)} style={{ background:S.card, borderRadius:16, padding:24, border:`1px solid ${S.border}`, boxShadow:"0 2px 8px rgba(30,58,30,0.05)" }}>
-                  <div style={{ marginBottom:14, height:80, display:"flex", alignItems:"center" }}>
-                    {p.image ? <img src={p.image} alt={p.name} style={{ width:80, height:80, objectFit:"cover", borderRadius:12 }} /> : <span style={{ fontSize:56 }}>{p.emoji}</span>}
-                  </div>
+                <div key={p.id} className="prod-card" style={{ background:S.card, borderRadius:16, padding:24, border:`1px solid ${S.border}`, boxShadow:"0 2px 8px rgba(30,58,30,0.05)" }}>
+                  <button className="product-visual" aria-label={`View ${p.name}`} onClick={() => setSelectedProduct(p)}>
+                    {productImage(p) ? <img src={productImage(p)} alt={p.name} loading="lazy" /> : <span aria-hidden="true">{p.emoji}</span>}
+                    <small>{p.category}</small>
+                  </button>
                   <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:7 }}>
-                    <h3 className="disp" style={{ fontSize:20, fontWeight:700, color:S.green, lineHeight:1.2 }}>{p.name}</h3>
+                    <h3 className="disp" style={{ fontSize:20, fontWeight:700, color:S.green, lineHeight:1.2 }}><button className="product-title" onClick={() => setSelectedProduct(p)}>{p.name}</button></h3>
                     <div style={{ display:"flex", gap:3, alignItems:"center", marginLeft:8, flexShrink:0 }}>
-                      <Star size={11} fill={S.gold} color={S.gold} />
-                      <span style={{ fontSize:11, color:S.gold, fontWeight:600 }}>{p.rating}</span>
+                      <span className="availability">Available</span>
                     </div>
                   </div>
                   <p style={{ fontSize:13, color:S.muted, lineHeight:1.65, marginBottom:18 }}>{p.desc}</p>
@@ -573,7 +579,7 @@ export default function FrancisFarms() {
                       <span className="disp" style={{ fontSize:25, fontWeight:700, color:S.green }}>${p.price.toFixed(2)}</span>
                       <span style={{ fontSize:12, color:S.muted, marginLeft:4 }}>/ {p.unit}</span>
                     </div>
-                    <button onClick={e => { e.stopPropagation(); addToCart(p); }} className="btn-green" style={{ background:S.green, color:"#fff", border:"none", borderRadius:10, padding:"9px 18px", fontSize:13, fontWeight:600, cursor:"pointer", display:"flex", alignItems:"center", gap:4 }}>
+                    <button onClick={e => { e.stopPropagation(); addToCart(p); }} aria-label={`Add ${p.name} to cart`} className="btn-green" style={{ background:S.green, color:"#fff", border:"none", borderRadius:10, padding:"9px 18px", fontSize:13, fontWeight:600, cursor:"pointer", display:"flex", alignItems:"center", gap:4 }}>
                       <Plus size={13} /> Add
                     </button>
                   </div>
@@ -582,6 +588,12 @@ export default function FrancisFarms() {
             </div>
           )}
 
+          <section className="farm-faq" id="delivery"><p className="eyebrow">GOOD TO KNOW</p><h2 className="disp">A little help before you order</h2>
+            <details><summary>How much is delivery?</summary><p>Delivery is ${DELIVERY_FEE.toFixed(2)}. Orders with a product subtotal of ${FREE_THRESHOLD} or more qualify for free delivery.</p></details>
+            <details><summary>When can I schedule my delivery?</summary><p>Choose an available date and a time window during checkout. Delivery hours are Monday through Saturday, 7 AM–5 PM.</p></details>
+            <details><summary>How do I check my order?</summary><p>Keep the order number from your confirmation, then use Track Order.</p><button onClick={() => setPage("track")}>Track an order <ArrowRight size={14} /></button></details>
+            <details><summary>Where can I learn about the farm?</summary><p>Get to know Francis Farms and our St. Thomas roots.</p><a href="/about">Meet the farm →</a></details>
+          </section>
           {/* Map */}
           <div style={{ padding:"0 28px 56px" }}>
             <div style={{ background:S.card, borderRadius:20, border:`1px solid ${S.border}`, overflow:"hidden", boxShadow:"0 2px 16px rgba(30,58,30,0.08)" }}>
@@ -600,6 +612,7 @@ export default function FrancisFarms() {
               </div>
             </div>
           </div>
+          <footer className="farm-footer"><div><strong className="disp">Francis Farms</strong><p>Fresh selections. St. Thomas, USVI.</p></div><nav aria-label="Footer"><a href="#produce">Shop produce</a><a href="#delivery">Delivery & FAQs</a><a href="/about">About the farm</a><button onClick={() => setPage("track")}>Track order</button></nav><p>© {new Date().getFullYear()} Francis Farms</p><p>Representative produce photos from Pexels. Callaloo: <a href="https://commons.wikimedia.org/wiki/File:Amaranthus_viridis_sl11.jpg">Stefan.lefnaer</a>, <a href="https://creativecommons.org/licenses/by-sa/4.0/">CC BY-SA 4.0</a>, resized and displayed cropped. Actual produce may vary.</p></footer>
         </div>
       )}
 
@@ -701,7 +714,7 @@ export default function FrancisFarms() {
                 <div style={{ display:"flex", flexDirection:"column", gap:12, marginBottom:16 }}>
                   {cart.map(item => (
                     <div key={item.id} style={{ display:"flex", justifyContent:"space-between" }}>
-                      <div><div style={{ fontSize:14 }}>{item.emoji} {item.name}</div><div style={{ fontSize:12, color:S.muted }}>×{item.qty} {item.unit}</div></div>
+                      <div><div style={{ fontSize:14, display:"flex", alignItems:"center", gap:8 }}>{productImage(item) && <img src={productImage(item)} alt="" width={36} height={36} style={{objectFit:"cover",borderRadius:6}} />} {item.name}</div><div style={{ fontSize:12, color:S.muted }}>×{item.qty} {item.unit}</div></div>
                       <span style={{ fontSize:14, fontWeight:500 }}>${(item.price*item.qty).toFixed(2)}</span>
                     </div>
                   ))}
@@ -797,7 +810,7 @@ export default function FrancisFarms() {
               ) : cart.map(item => (
                 <div key={item.id} style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"14px 0", borderBottom:`1px solid ${S.border}` }}>
                   <div>
-                    <div style={{ fontSize:14, fontWeight:500, marginBottom:2 }}>{item.emoji} {item.name}</div>
+                    <div style={{ fontSize:14, fontWeight:500, marginBottom:2, display:"flex", alignItems:"center", gap:8 }}>{productImage(item) && <img src={productImage(item)} alt="" width={36} height={36} style={{objectFit:"cover",borderRadius:6}} />} {item.name}</div>
                     <div style={{ fontSize:13, color:S.green, fontWeight:600 }}>${(item.price*item.qty).toFixed(2)}</div>
                   </div>
                   <div style={{ display:"flex", alignItems:"center", gap:9 }}>
@@ -815,8 +828,11 @@ export default function FrancisFarms() {
                   <span style={{ color:S.muted, fontSize:14 }}>Subtotal</span>
                   <span className="disp" style={{ fontSize:24, fontWeight:700, color:S.green }}>${subtotal.toFixed(2)}</span>
                 </div>
+                <div className="cart-costs"><span>Delivery</span><strong>{delivery===0 ? "Free" : `$${delivery.toFixed(2)}`}</strong></div>
+                {discount > 0 && <div className="cart-costs"><span>Discount</span><strong>−${discount.toFixed(2)}</strong></div>}
+                <div className="cart-costs"><span>Total</span><strong>${total.toFixed(2)}</strong></div>
                 <button onClick={() => { setCartOpen(false); setPage("checkout"); }} className="btn-green" style={{ width:"100%", background:S.green, color:"#fff", border:"none", borderRadius:12, padding:14, fontSize:15, fontWeight:600, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", gap:6, marginBottom:8 }}>
-                  Checkout <ArrowRight size={15} />
+                  Checkout · ${total.toFixed(2)} <ArrowRight size={15} />
                 </button>
                 <a href={whatsappMessage()} target="_blank" rel="noreferrer" style={{ display:"flex", alignItems:"center", justifyContent:"center", gap:6, padding:"12px", borderRadius:12, border:"1.5px solid #25D366", color:"#128C7E", fontSize:13, fontWeight:600, textDecoration:"none" }}>
                   <MessageCircle size={14} /> Order via WhatsApp
